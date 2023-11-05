@@ -8,6 +8,7 @@
 #include "resource.h"
 
 #include "ValuesSelector.h"
+#include "globals.h"
 
 
 // Global variables
@@ -23,12 +24,16 @@ HINSTANCE hInst;
 
 HWND hEditFilePath;
 HWND hBrowseButton;
+HWND hProceedButton;
 HWND hFirstCoordsOfLegend;
 HWND hEndCoordsOfLegend;
+HWND hTestButton;
 
 HWND hLegendButton;
 HWND hSecondaryWindow;
 
+HWND hCheckboxBak;
+HWND hCheckboxOverride;
 
 #define ID_BUTTON 1001
 
@@ -88,7 +93,7 @@ int WINAPI WinMain(
         szTitle,
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT,
-        1000, 500,
+        600, 250,
         NULL,
         NULL,
         hInstance,
@@ -133,7 +138,7 @@ int WINAPI WinMain(
 
 HBRUSH hEditBkGnd = NULL; // Global brush for edit control background
 HBRUSH hButtonBkGnd = NULL;
-HPEN hWhitePen = NULL; // Global brush for button border
+HPEN hWhitePen = CreatePen(PS_SOLID, 1, RGB(255, 255, 255));  // Global brush for button border
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
@@ -145,26 +150,42 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     {
     
     case WM_CREATE:
+    {
         hEditFilePath = CreateWindowEx(WS_EX_CLIENTEDGE, L"EDIT", L"",
             WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
             10, 30, 250, 25, hWnd, NULL, GetModuleHandle(NULL), NULL);
 
         hBrowseButton = CreateWindow(L"BUTTON", L"Przegladaj",
-            WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, // Add BS_OWNERDRAW style
+            WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
             270, 30, 95, 25, hWnd, (HMENU)1, GetModuleHandle(NULL), NULL);
 
         hLegendButton = CreateWindow(L"BUTTON", L"Wprowadz dane legendy",
             WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
-            700, 10, 200, 25, hWnd, (HMENU)2, GetModuleHandle(NULL), NULL);
+            400, 30, 150, 25, hWnd, (HMENU)2, GetModuleHandle(NULL), NULL);
 
-        SendMessage(hFirstCoordsOfLegend, EM_SETLIMITTEXT, (WPARAM)5, 0);
-        SendMessage(hEndCoordsOfLegend, EM_SETLIMITTEXT, (WPARAM)5, 0);
-        SetWindowText(hFirstCoordsOfLegend, L"D10");
-        SetWindowText(hEndCoordsOfLegend, L"N12");
+        hProceedButton = CreateWindow(L"BUTTON", L"Zatwierdz",
+            WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
+            235, 150, 100, 25, hWnd, (HMENU)3, GetModuleHandle(NULL), NULL);
+
+        // Create the checkboxes
+        hCheckboxBak = CreateWindowEx(
+            0, L"BUTTON", L"Stworz kopie zapasowa (.bak)",
+            WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_CHECKBOX,
+            10, 75, 220, 35, hWnd, (HMENU)101,
+            (HINSTANCE)GetWindowLongPtr(hWnd, GWLP_HINSTANCE), NULL);
+        hCheckboxOverride = CreateWindowEx(
+            0, L"BUTTON", L"Nadpisz stary plik",
+            WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_CHECKBOX,
+            10, 100, 185, 35, hWnd, (HMENU)102,
+            (HINSTANCE)GetWindowLongPtr(hWnd, GWLP_HINSTANCE), NULL);
+
+        // Subclass the checkbox
+        //SetWindowSubclass(hCheckbox, CheckboxSubclassProc, 0, 0);
         break;
-
+    }
     case WM_COMMAND:
-        if (LOWORD(wParam) == 1) {  // Button's ID
+        switch ((LOWORD(wParam))) {
+        case 1: {
             OPENFILENAME ofn = { 0 };
             WCHAR filePath[MAX_PATH] = { 0 }; // Using WCHAR for wide characters
 
@@ -183,8 +204,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 SetWindowText(hEditFilePath, filePath); // filePath is now wide character string
             }
             InvalidateRect((HWND)lParam, NULL, TRUE);  // force button to redraw
-        }
-        if (LOWORD(wParam) == 2) {
+            break; }
+        case 2: {
             WNDCLASSEX wcCheck;
             if (!GetClassInfoEx(GetModuleHandle(NULL), L"SecondaryWindowClass", &wcCheck)) {
                 // If not, register the class
@@ -206,13 +227,68 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             }
 
             hSecondaryWindow = CreateWindowEx(0, L"SecondaryWindowClass", L"Text Inputs",
-                WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 200, 200, NULL, NULL, GetModuleHandle(NULL), NULL);
+                WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 180, 250, NULL, NULL, GetModuleHandle(NULL), NULL);
 
             ShowWindow(hSecondaryWindow, SW_SHOW);
+            break; }
+		case 3: {
+            bool legendDataCorrect = true;
+            for (int i = 0; i < 4; i++)
+            {
+                if (labelValues[i].empty())
+                {
+					legendDataCorrect = false;
+                    MessageBox(
+                        hWnd,                   // Parent window, if available, or NULL
+                        _T("Nie wpisano wartosci legendy lub danych!"), // Message to be displayed
+                        _T("Blad"),             // Title of the message box
+                        MB_ICONERROR | MB_OK    // Style of the message box
+                    );
+					break;
+				}
+            }
+            if (legendDataCorrect && sheetName.empty())
+            {
+                legendDataCorrect = false;
+                MessageBox(
+                    hWnd,                   // Parent window, if available, or NULL
+                    _T("Nie wybrano arkusza!"), // Message to be displayed
+                    _T("Blad"),             // Title of the message box
+                    MB_ICONERROR | MB_OK    // Style of the message box
+                );
+                break;
+            }
+            InvalidateRect((HWND)lParam, NULL, TRUE);  // force button to redraw
+            break; }
+        case 101:
+            if (HIWORD(wParam) == BN_CLICKED) {
+				BOOL checked = IsDlgButtonChecked(hWnd, 101);
+                if (checked) {
+					// The checkbox is checked
+					CheckDlgButton(hWnd, 101, BST_UNCHECKED);
+				}
+                else {
+					// The checkbox is unchecked
+					CheckDlgButton(hWnd, 101, BST_CHECKED);
+				}
+			}
+			break;
+        case 102:
+            if (HIWORD(wParam) == BN_CLICKED) {
+                BOOL checked = IsDlgButtonChecked(hWnd, 102);
+                if (checked) {
+                    // The checkbox is checked
+                    CheckDlgButton(hWnd, 102, BST_UNCHECKED);
+                }
+                else {
+                    // The checkbox is unchecked
+                    CheckDlgButton(hWnd, 102, BST_CHECKED);
+                }
+            }
+            break;
         }
-        break;
     case WM_CTLCOLORBTN:
-        if ((HWND)lParam == hBrowseButton || (HWND)lParam == hLegendButton)
+        if ((HWND)lParam == hBrowseButton || (HWND)lParam == hLegendButton || (HWND)lParam == hProceedButton)
         {
             HDC hdcButton = (HDC)wParam;
             SetTextColor(hdcButton, RGB(255, 255, 255)); // Text Color: White
@@ -223,7 +299,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             return (INT_PTR)hButtonBkGnd;
         }
         break;
+    case WM_CTLCOLORSTATIC:
+    {
+        HDC hdcStatic = (HDC)wParam;
+        SetTextColor(hdcStatic, RGB(255, 255, 255)); // Set text color to white
+        SetBkMode(hdcStatic, TRANSPARENT); // Set background mode to transparent
 
+        // Return a hollow brush to maintain a transparent background
+        static HBRUSH hBrushTransparent = (HBRUSH)GetStockObject(HOLLOW_BRUSH);
+        return (LRESULT)hBrushTransparent;
+    }
     case WM_DRAWITEM:
     {
         LPDRAWITEMSTRUCT lpDIS = (LPDRAWITEMSTRUCT)lParam;
@@ -263,9 +348,37 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             SetBkMode(lpDIS->hDC, TRANSPARENT);
             DrawText(lpDIS->hDC, L"Podaj dane pliku", -1, &lpDIS->rcItem, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
         }
-    }
-    break;
+        if (lpDIS->CtlID == 3) // Button's ID
+        {
+            if (hWhitePen == NULL)
+                hWhitePen = CreatePen(PS_SOLID, 1, RGB(255, 255, 255)); // White pen for border
 
+            // Fill the button with gray color
+            FillRect(lpDIS->hDC, &lpDIS->rcItem, hButtonBkGnd);
+
+            // Draw the white border
+            HPEN hOldPen = (HPEN)SelectObject(lpDIS->hDC, hWhitePen);
+            Rectangle(lpDIS->hDC, lpDIS->rcItem.left, lpDIS->rcItem.top, lpDIS->rcItem.right, lpDIS->rcItem.bottom);
+            SelectObject(lpDIS->hDC, hOldPen);
+
+            // Draw the button text
+            SetTextColor(lpDIS->hDC, RGB(255, 255, 255)); // White text
+            SetBkMode(lpDIS->hDC, TRANSPARENT);
+            DrawText(lpDIS->hDC, L"Zatwierdz", -1, &lpDIS->rcItem, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+        }
+        break;
+    }
+    
+    case WM_ERASEBKGND: // For background not to dissapear after minimalizing
+    {
+        HDC hdc = (HDC)wParam;
+        RECT rect;
+        GetClientRect(hWnd, &rect); // Get the dimensions of the window
+        HBRUSH hbrBackground = CreateSolidBrush(RGB(0x24, 0x24, 0x24)); // Or use a global brush if you have one
+        FillRect(hdc, &rect, hbrBackground);
+        DeleteObject(hbrBackground); // If you created a new brush
+        return 1; // Return non-zero to indicate that you handled the message
+    }
     case WM_DESTROY:
         if (hButtonBkGnd)
             DeleteObject(hButtonBkGnd); // Cleanup the brush
@@ -284,24 +397,3 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
     return 0;
 }
-
-//using namespace std;
-//int main()
-//{
-//    HINSTANCE hInstance = GetModuleHandle(NULL);
-//    return WinMain(hInstance, NULL, GetCommandLineA(), SW_SHOW);
-//    xlnt::workbook wb;
-//    wb.load("D:/Test.xlsx");
-//    auto ws = wb.active_sheet();
-//    std::clog << "Processing spread sheet" << std::endl;
-//    for (auto row : ws.rows(false))
-//    {
-//        for (auto cell : row)
-//        {
-//            xlnt::cell_reference cellRef(cell.column_index(), cell.row());
-//            std::clog << cellRef.to_string() << ": " << cell.to_string() << std::endl;
-//        }
-//    }
-//    std::clog << "Processing complete" << std::endl;
-//    return 0;
-//}

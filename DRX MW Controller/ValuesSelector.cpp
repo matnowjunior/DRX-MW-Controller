@@ -7,11 +7,16 @@
 
 #include "resource.h"
 #include "ValuesSelector.h"
+#include <tchar.h>
 
 HWND hApply;
 HWND hCellData[4];
+HWND hSheet;
 HBRUSH hVSButtonBkGnd;
 HPEN hWhitePen2 = NULL;
+
+std::wstring labelValues[4];
+std::wstring sheetName;
 
 HFONT hArialFont = CreateFont(16,          // Height of font
     0,           // Average character width
@@ -27,32 +32,41 @@ HFONT hArialFont = CreateFont(16,          // Height of font
     ANTIALIASED_QUALITY, // Output quality
     FF_DONTCARE | DEFAULT_PITCH, // Family and pitch
     L"Arial");   // Font name
-
+int RowAsANumber(std::wstring value) {
+    int rowValue = 0;
+    for (int i = 0; i < value.length(); i++)
+    {
+        if(isdigit(value[i])) rowValue += (int)value[i];
+    }
+    return rowValue;
+}
 LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
     case WM_CHAR: {
         wchar_t charToProcess = static_cast<wchar_t>(wParam);
-
-        if (iswlower(charToProcess)) {
-            charToProcess = towupper(charToProcess);
-        }
-
-        if (iswalpha(charToProcess) || iswdigit(charToProcess) || charToProcess == VK_BACK) { // Check if it's a letter, digit, or backspace
-            WCHAR buffer[1024];
-            GetWindowText(hWnd, buffer, 1024);
-            std::wstring currentText = buffer;
-            std::wstring newText = currentText + charToProcess;
-            std::wregex pattern(L"^[A-Za-z]+[0-9]*$");
-            if (charToProcess != VK_BACK && !std::regex_match(newText, pattern)) {
-                MessageBeep(MB_ICONERROR); // Play error sound
-                return 0; // Do not process this character
+        if (GetDlgCtrlID(hWnd) >= 410 && GetDlgCtrlID(hWnd) <= 413) {
+            if (iswlower(charToProcess)) {
+                charToProcess = towupper(charToProcess);
             }
+
+            if (iswalpha(charToProcess) || iswdigit(charToProcess) || charToProcess == VK_BACK) { // Check if it's a letter, digit, or backspace
+                WCHAR buffer[1024];
+                GetWindowText(hWnd, buffer, 1024);
+                std::wstring currentText = buffer;
+                std::wstring newText = currentText + charToProcess;
+                std::wregex pattern(L"^[A-Za-z]+[0-9]*$");
+                if (charToProcess != VK_BACK && !std::regex_match(newText, pattern)) {
+                    MessageBeep(MB_ICONERROR); // Play error sound
+                    return 0; // Do not process this character
+                }
+            }
+            else {
+                MessageBeep(MB_ICONERROR); // Play error sound
+                return 0; // Reject special characters
+            }
+            wParam = static_cast<WPARAM>(charToProcess); // Update the wParam with possibly changed character
         }
-        else {
-            MessageBeep(MB_ICONERROR); // Play error sound
-            return 0; // Reject special characters
-        }
-        wParam = static_cast<WPARAM>(charToProcess); // Update the wParam with possibly changed character
+        
     } break;
     }
     // Call the original EDIT control window procedure to process other messages and default behavior
@@ -72,6 +86,7 @@ LRESULT CALLBACK SecondaryWindowProcedure(HWND hWnd, UINT uMsg, WPARAM wParam, L
         // Begin application-specific layout section.
         TextOut(hdc, 25, 5, L"Pozycja Legendy:", wcslen(L"Pozycja Legendy:"));
         TextOut(hdc, 30, 60, L"Pozycja Danych:", wcslen(L"Pozycja Danych:"));
+        TextOut(hdc, 60, 110, L"Arkusz:", wcslen(L"Arkusz:"));
         // End application-specific layout section.
 
         EndPaint(hWnd, &ps);
@@ -89,7 +104,7 @@ LRESULT CALLBACK SecondaryWindowProcedure(HWND hWnd, UINT uMsg, WPARAM wParam, L
             hVSButtonBkGnd = CreateSolidBrush(RGB(50, 50, 50));
         hApply = CreateWindow(L"BUTTON", L"",
             WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
-            35, 120, 100, 25, hWnd, (HMENU)401, GetModuleHandle(NULL), NULL);
+            30, 170, 100, 25, hWnd, (HMENU)401, GetModuleHandle(NULL), NULL);
         hCellData[0] = CreateWindow(L"EDIT", L"",
             WS_CHILD | WS_VISIBLE | WS_BORDER | ES_LEFT,
             15, 30, 50, 25, hWnd, (HMENU)410, GetModuleHandle(NULL), NULL);
@@ -102,14 +117,18 @@ LRESULT CALLBACK SecondaryWindowProcedure(HWND hWnd, UINT uMsg, WPARAM wParam, L
         hCellData[3] = CreateWindow(L"EDIT", L"",
             WS_CHILD | WS_VISIBLE | WS_BORDER | ES_LEFT,
             95, 80, 50, 25, hWnd, (HMENU)413, GetModuleHandle(NULL), NULL);
+        hSheet = CreateWindow(L"EDIT", L"",
+            WS_CHILD | WS_VISIBLE | WS_BORDER | ES_LEFT,
+            15, 130, 130, 25, hWnd, (HMENU)414, GetModuleHandle(NULL), NULL);
         for (int i = 0; i < 4; i++)
         {
             SetWindowLongPtr(hCellData[i], GWLP_USERDATA, (LONG_PTR)SetWindowLongPtr(hCellData[i], GWLP_WNDPROC, (LONG_PTR)EditSubclassProc));
+            SetWindowText(hCellData[i], labelValues[i].c_str());
         }
-        
+        SetWindowLongPtr(hSheet, GWLP_USERDATA, (LONG_PTR)SetWindowLongPtr(hSheet, GWLP_WNDPROC, (LONG_PTR)EditSubclassProc));
+        SetWindowText(hSheet, sheetName.c_str());
         InvalidateRect(hApply, NULL, TRUE);  // force button to redraw
     }break;
-        
     case WM_CTLCOLORBTN:
         if ((HWND)lParam == hApply)
         {
@@ -144,7 +163,55 @@ LRESULT CALLBACK SecondaryWindowProcedure(HWND hWnd, UINT uMsg, WPARAM wParam, L
     }
     case WM_COMMAND:
         if (LOWORD(wParam) == 401) {  // Button's ID
+            bool isDataValid = true;
+
+            WCHAR buffer[256];
+
+            for (int i = 0; i < 4; i++)
+            {
+                GetWindowText(hCellData[i], buffer, 256); // Retrieve text
+                labelValues[i] = buffer; // Store it in the array
+                if (labelValues[i].empty()) {
+                    MessageBox(
+                        hWnd,                   // Parent window, if available, or NULL
+                        _T("Nie wpisano wartosci legendy lub danych!"), // Message to be displayed
+                        _T("Blad"),             // Title of the message box
+                        MB_ICONERROR | MB_OK    // Style of the message box
+                    );
+                    isDataValid = false;
+                    break;
+                }
+			}
+            if (isDataValid) {
+                GetWindowText(hSheet, buffer, 256); // Retrieve text
+				sheetName = buffer; // Store it in the array
+                if (sheetName.empty()) {
+                    MessageBox(
+						hWnd,                   // Parent window, if available, or NULL
+						_T("Nie wpisano nazwy arkusza!"), // Message to be displayed
+						_T("Blad"),             // Title of the message box
+						MB_ICONERROR | MB_OK    // Style of the message box
+					);
+					isDataValid = false;
+				}
+            }
+            //Check if diffrence between collums is 3
+            if (isDataValid) {
+				int diffrence = RowAsANumber(labelValues[1]) - RowAsANumber(labelValues[0]);
+                if (diffrence != 2) {
+                    MessageBox(
+						hWnd,                   // Parent window, if available, or NULL
+						_T("Wiersze legendy musza byc oddalone o 3!"), // Message to be displayed
+						_T("Blad"),             // Title of the message box
+						MB_ICONERROR | MB_OK    // Style of the message box
+					);
+					isDataValid = false;
+				}
+			}
+
             InvalidateRect((HWND)lParam, NULL, TRUE);  // force button to redraw
+            if(isDataValid) SendMessage(hWnd, WM_CLOSE, 0, 0);
+            
         }
         break;
     case WM_CLOSE:
