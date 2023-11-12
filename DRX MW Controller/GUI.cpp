@@ -10,6 +10,10 @@
 #include "ValuesSelector.h"
 #include "globals.h"
 
+#include <string>
+#include <codecvt>
+#include <locale>
+#include <vector>
 
 // Global variables
 
@@ -37,6 +41,7 @@ HWND hCheckboxOverride;
 
 #define ID_BUTTON 1001
 
+std::string stringPath;
 // Forward declarations of functions included in this code module:
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 
@@ -139,6 +144,29 @@ int WINAPI WinMain(
 HBRUSH hEditBkGnd = NULL; // Global brush for edit control background
 HBRUSH hButtonBkGnd = NULL;
 HPEN hWhitePen = CreatePen(PS_SOLID, 1, RGB(255, 255, 255));  // Global brush for button border
+std::string WStringConverter(const std::wstring& s)
+{
+	std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
+	return conv.to_bytes(s);
+}
+std::wstring GetEditControlText(HWND hWndEdit) {
+    // Get the length of the text
+    int length = GetWindowTextLength(hWndEdit);
+    if (length == 0) {
+        return L"";  // No text in the edit control
+    }
+
+    // Create a vector with the right size (+1 for null-terminator)
+    std::vector<wchar_t> buffer(length + 1);
+
+    // Retrieve the text
+    GetWindowText(hWndEdit, &buffer[0], length + 1);
+
+    // Convert the buffer to a wstring
+    std::wstring text(&buffer[0]);
+
+    return text;
+}
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
@@ -199,10 +227,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             ofn.nMaxFileTitle = 0;
             ofn.lpstrInitialDir = NULL;
             ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
-
+            
+            
             if (GetOpenFileName(&ofn)) {
                 SetWindowText(hEditFilePath, filePath); // filePath is now wide character string
             }
+
             InvalidateRect((HWND)lParam, NULL, TRUE);  // force button to redraw
             break; }
         case 2: {
@@ -259,6 +289,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 break;
             }
             InvalidateRect((HWND)lParam, NULL, TRUE);  // force button to redraw
+            Convert(WStringConverter(GetEditControlText(hEditFilePath)), WStringConverter(sheetName), WStringConverter(labelValues[0]), WStringConverter(labelValues[1]), WStringConverter(labelValues[2]), WStringConverter(labelValues[3]));
             break; }
         case 101:
             if (HIWORD(wParam) == BN_CLICKED) {
