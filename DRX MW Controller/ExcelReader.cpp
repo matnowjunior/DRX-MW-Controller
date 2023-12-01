@@ -1,49 +1,23 @@
 #include <string>
 #include <iostream>
+#include <xlnt/xlnt.hpp>
 #include <fstream>
 #include <filesystem>
-
+#include <cstring>
+#include <cwchar>
 #include <windows.h>
 #include "globals.h"
 #include <string>
 #include <codecvt>
 #include <locale>
-
 #include "libxl.h"
-#include <map>
-//define colors
-#define RED "\033[31m"    
-#define GREEN "\033[32m" 
-#define RESET "\033[0m"
 
+using namespace std;
 using namespace libxl;
 
-//global variables
-/*std::string announcement, color;
 int coordinates[4];
 
-xlnt::rgb_color get_cell_color_solid(const xlnt::cell& cell)
-{
-    xlnt::rgb_color color = cell.fill().pattern_fill().foreground().get().rgb();
-    return color;
-}
-
-xlnt::cell cell_get(int x, int y, const xlnt::worksheet ws)
-{
-
-    xlnt::cell cell = ws.cell(x, y);
-    return cell;
-}
-
-//function which fill specified cell with color
-void color_fill_cell(const xlnt::cell& cell, const xlnt::rgb_color& rgb) {
-
-    xlnt::cell cell1 = cell;
-    cell1.fill(xlnt::fill::solid(rgb));
-    cell.fill() = cell1.fill();
-
-}
-
+vector<Color> colors;
 
 int titleToNumber(string s)
 {
@@ -55,7 +29,7 @@ int titleToNumber(string s)
     return r;
 }
 
-pair <int, int> signs_numbers_separately(string cell_input)
+pair <int, int> signs_numbers_separately(wstring cell_input)
 {
     string letters, digits;
     for (char c : cell_input) {
@@ -71,7 +45,7 @@ pair <int, int> signs_numbers_separately(string cell_input)
 
 }
 
-void get_cell(string first_cell, string second_cell)
+void get_cell(wstring first_cell, wstring second_cell)
 {
 
     coordinates[0] = signs_numbers_separately(first_cell).first;
@@ -85,14 +59,23 @@ void get_cell(string first_cell, string second_cell)
     if (coordinates[3] < coordinates[1])
         swap(coordinates[3], coordinates[1]);
 }
-//wchar_t* convertchararraytolpcwstr(const char* chararray)
-//{
-//    char text[] = "something";
-//    wchar_t wtext[256];
-//    mbstowcs(wtext, text, strlen(text) + 1);//Plus null
-//    LPWSTR ptr = wtext;
-//    return ptr;
-//}
+
+void setCellFillColor(Sheet* sheet, int row, int col, const Color& fillColor) {
+    if (sheet) {
+        Format* cellFormat = sheet->cellFormat(row, col);
+        cellFormat->setPatternBackgroundColor(fillColor);
+        sheet->writeBlank(row, col, cellFormat);
+    }
+}
+
+void getCellColor(Sheet* sheet, int row, int col) {
+    //Format* format = sheet->cellFormat(row, col);
+    //int colorValue = format->fillPattern();
+
+    //// Store the color in the vector
+    //colors.push_back(format->patternForegroundColor());
+}
+
 LPCWSTR stringToLPCWSTR(const std::string& str) {
     // Convert std::string to std::wstring
     std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
@@ -100,35 +83,6 @@ LPCWSTR stringToLPCWSTR(const std::string& str) {
 
     // Return LPCWSTR (pointer to the wide string)
     return wideStr.c_str();
-}
-*/
-
-void parseCellReference(const std::string& ref, int& row, int& col) {
-    col = 0;
-    int i = 0;
-
-    // Process alphabetic part for column (e.g., "A", "B", ..., "AA", ...)
-    while (i < ref.length() && std::isalpha(ref[i])) {
-        col = col * 26 + (ref[i] - 'A' + 1);
-        i++;
-    }
-
-    col--; // Adjust column index to be zero-based
-
-    // Process numeric part for row
-    row = 0;
-    while (i < ref.length() && std::isdigit(ref[i])) {
-        row = row * 10 + (ref[i] - '0');
-        i++;
-    }
-
-    row--; // Adjust row index to be zero-based
-}
-wchar_t* StringToWChar_t(const std::string& str) {
-    int len = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, NULL, 0);
-    wchar_t* wstr = new wchar_t[len];
-    MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, wstr, len);
-    return wstr;
 }
 LPCWSTR charToLPCWSTR(const char* charArray) {
     // Calculate the length of the result wide string
@@ -142,106 +96,84 @@ LPCWSTR charToLPCWSTR(const char* charArray) {
 
     return wString;
 }
-using namespace std;
-void Convert(string path, string sheet, string cl1, string cl2, string cd1, string cd2)
+
+void getCellColor(Book* book, Sheet* sheet, int i, int j)
 {
-    string newFileName, originalFileName, newName;
+    Format* format1 = book->addFormat();
 
-    newName = path;
+    format1 = sheet->cellFormat(i, j);
+    format1->setFillPattern(FILLPATTERN_SOLID);
+    colors.push_back(format1->patternForegroundColor());
+}
+
+void setCellFillColor(Book* book, Sheet* sheet, int i, int j, Color color)
+{
+    Format* format2 = book->addFormat();
+    Font* font = book->addFont();
+
+
+    double number = sheet->readNum(i, j);
+
+    font = sheet->cellFormat(i, j)->font();
+    format2->setFont(font);
+    format2->setPatternForegroundColor(color);
+    format2->setFillPattern(FILLPATTERN_SOLID);
+    sheet->writeBlank(i, j, format2);
+    sheet->writeNum(i, j, number, format2);
+}
+
+void Convert(wstring path, int sheet1, wstring cl1, wstring cl2, wstring cd1, wstring cd2)
+{
     Book* book = xlCreateXMLBook();
-    // Only threshhold is being used
-    std::map<float, Format*> colorMap;
-    if (book) {
-        if (book->load(StringToWChar_t(path)))
-        {
-			Sheet* sheet = book->getSheet(8);
-            if (sheet)
-            {
-                //Load legend (chyba tak to jest po angielsku)
-                int startRow, startCol, endRow, endCol;
-                parseCellReference(cl1, startRow, startCol);
-                parseCellReference(cl2, endRow, endCol);
-                
-                for (int i = startCol; i <= endCol; i++)
-                {
-                    //Color
-                    Format* format = sheet->cellFormat(startRow, i);
-                    //Max value
-                    CellType cellType = sheet->cellType(startRow, i+2);
-                    if (cellType == CELLTYPE_NUMBER)
-                    {
-						float value = sheet->readNum(startRow, i+2);
-						colorMap[value] = format;
-					}
-                    else
-                    {
-                        //Cos sie zjebalo
-                    }
-				}
-			}
-		}
-    }
+    book->setRgbMode(true);
 
-    /*
-    //Loading excel file
-    try {
+    book->load(L"D:/excel/DRX MW CONTROLLER/DRX-MW-Controller/heh.xlsx");
 
-        wb.load(path);  // excel file path
+    int activeSheetIndex = book->activeSheet();
+    Sheet* sheet = book->getSheet(activeSheetIndex);
+    // FillPattern fillPatterns = FILLPATTERN_SOLID;
 
-        //ws = wb.active_sheet();//getting active worksheet from workbook
-        ws = wb.sheet_by_title(sheet);//getting specified by user worksheet from workbook
+     //Format* format2 = book->addFormat();
+     //format2->setFillPattern(fillPatterns);
+     //format2->setPatternForegroundColor(book->colorPack(50, 50, 50));*/
 
-    }
-    catch (const xlnt::exception& e) {
-        MessageBox(NULL, charToLPCWSTR(e.what()), L"Error", MB_ICONERROR);
-        //cout << RED << "Processing failed " << RESET << e.what() << endl;//displaying an error message when trying to read a file
-        return;
-    }
+     /*getCellColor(book, sheet, 1, 4);
+     getCellColor(book, sheet, 1, 5);
 
-    //LEGEND
-    ///////////////////////////////////////////////////////////////////////////
-
-
-    //cout << "Provide cells for legend" << endl;
+     setCellFillColor(book, sheet, 1, 0, colors[0]);
+     setCellFillColor(book, sheet, 1, 1, colors[1]);*/
 
     get_cell(cl1, cl2);
     double* min_cell_values = new double[(coordinates[2] - coordinates[0]) + 2];
     double* max_cell_values = new double[(coordinates[2] - coordinates[0]) + 2];
-    //vector<int> min_cell_values;
-    //vector<int> max_cell_values;
-
-    vector<xlnt::rgb_color> color_table;
-
-    xlnt::cell cell = ws.cell(1, 1);
 
     int col_counter;
-
     int index = 0;
-
     int length = coordinates[2] - coordinates[0];
 
+
+    //pętla legendy
     for (int i = coordinates[0]; i < (coordinates[2] + 1); i++)
     {
         col_counter = 1;
         for (int j = coordinates[1]; j < (coordinates[3] + 1); j++)
         {
-            cell = ws.cell(i, j);
             switch (col_counter)
             {
             case 1:
             {
-                color_table.push_back(get_cell_color_solid(cell_get(i, j, ws)));
+                getCellColor(book, sheet, j - 1, i - 1);
                 break;
             }
             case 2:
             {
-                min_cell_values[index] = double(cell.value<double>());
+                min_cell_values[index] = sheet->readNum(j - 1, i - 1);
                 //cout << "min: " << min_cell_values[i] << endl;
                 break;
             }
             case 3:
             {
-                max_cell_values[index] = double(cell.value<double>());
+                max_cell_values[index] = sheet->readNum(j - 1, i - 1);
                 //cout << "max:" << max_cell_values[i] << endl;
                 break;
             }
@@ -254,38 +186,42 @@ void Convert(string path, string sheet, string cl1, string cl2, string cd1, stri
         index++;
 
     }
-    
+
+    //pętla wartości
     get_cell(cd1, cd2);
 
-    color_fill_cell(cell_get(1, 1, ws), color_table[0]);
-
-    for (int i = coordinates[1]; i < coordinates[3] + 1; i++)
+    for (int i = coordinates[0]; i < coordinates[2] + 1; i++)
     {
-        for (int j = coordinates[0]; j < coordinates[2] + 1; j++)
+        for (int j = coordinates[1]; j < coordinates[3] + 1; j++)
         {
-            xlnt::cell cell = cell_get(j, i, ws);
-            //cout << to_string(cell_get(j, i, ws).value<int>()) << " ";
-            if (cell.data_type() != xlnt::cell_type::number)
-            {
-				continue;
-            }
-            else {
-                for (int w = 0; w < length + 1; w++)
-                {
-                    auto val = cell_get(j, i, ws).value<double>();
 
-                    if (val > min_cell_values[w] && val < max_cell_values[w])
+            //cout << to_string(cell_get(j, i, ws).value<int>()) << " ";
+
+            for (int w = 0; w < length + 1; w++)
+            {
+                //cout << "w: " << w << endl;
+                //cout << to_string(min_cell_values[w]) << endl;
+                //cout << to_string(max_cell_values[w]) << endl;
+                int cellValue = sheet->readNum(i, j);
+
+                // Check if the cell has a value (not equal to -1 or any other indicator)
+                if (cellValue != -1)
+                {
+                    if (sheet->readNum(j - 1, i - 1) > min_cell_values[w] && sheet->readNum(j - 1, i - 1) <= max_cell_values[w])
                     {
-                        color_fill_cell(cell_get(j, i, ws), color_table[w]);
+                        int numer = sheet->readNum(j - 1, i - 1);
+                        setCellFillColor(book, sheet, j - 1, i - 1, colors[w]);
+
                         break;
                     }
                 }
+                                
             }
+
         }
-        //cout << endl;
+
     }
 
-
-    wb.save(newName);
-    */
+    book->save(L"example.xlsx");
+    book->release();
 }
