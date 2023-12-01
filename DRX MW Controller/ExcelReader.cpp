@@ -1,6 +1,5 @@
 #include <string>
 #include <iostream>
-#include <xlnt/xlnt.hpp>
 #include <fstream>
 #include <filesystem>
 
@@ -9,15 +8,18 @@
 #include <string>
 #include <codecvt>
 #include <locale>
+
+#include "libxl.h"
+#include <map>
 //define colors
 #define RED "\033[31m"    
 #define GREEN "\033[32m" 
 #define RESET "\033[0m"
 
-using namespace std;
+using namespace libxl;
 
 //global variables
-string announcement, color;
+/*std::string announcement, color;
 int coordinates[4];
 
 xlnt::rgb_color get_cell_color_solid(const xlnt::cell& cell)
@@ -42,71 +44,6 @@ void color_fill_cell(const xlnt::cell& cell, const xlnt::rgb_color& rgb) {
 
 }
 
-//string wybierzArkusz(xlnt::workbook& wb)
-//{
-//    xlnt::worksheet ws;
-//    int num_sheets = wb.sheet_count();//returns number of workshhets in this workbook
-//    cout << "Avaiable sheets:" << endl;
-//    for (int i = 1; i <= num_sheets; i++) {
-//        ws = wb.sheet_by_index(i - 1);//returns worksheet at given index
-//        cout << i << ". " << ws.title() << endl;//returns title of the sheet
-//    }
-//
-//    int wybor;
-//    while (true) {
-//        cout << "Choose sheet number: " << endl;
-//        cin >> wybor;
-//        if (wybor >= 1 && wybor <= num_sheets) {
-//            xlnt::worksheet wybranyArkusz = wb.sheet_by_index(wybor - 1);
-//            return wybranyArkusz.title();
-//        }
-//        else {
-//            cout << "Sheet number is not valid. Try again." << endl;
-//        }
-//    }
-//}
-//
-//string CopyFile()
-//{
-//    string originalFileName, NewFileName;
-//
-//    do
-//    {
-//        cout << "Provide original path name: ";
-//        cin >> originalFileName;
-//
-//        if (!fs::exists(originalFileName))
-//        {
-//            cout << RED << "Error occured" << RESET << endl;
-//        }
-//        else
-//        {
-//            cout << GREEN << "Correct path" << RESET << endl;
-//        }
-//    } while (!fs::exists(originalFileName));
-//
-//    do
-//    {
-//        cout << "Provide new path: ";
-//        cin >> NewFileName;
-//
-//        if (!fs::exists(NewFileName))
-//        {
-//            cout << RED << "Error occured" << RESET << endl;
-//        }
-//        else
-//        {
-//            cout << GREEN << "Correct path" << RESET << endl;
-//        }
-//    } while (!fs::exists(NewFileName));
-//
-//    string DestName = NewFileName + "/excel_new.xlsx";
-//
-//    fs::copy_file(originalFileName, DestName);
-//
-//    return DestName;
-//
-//}
 
 int titleToNumber(string s)
 {
@@ -164,6 +101,35 @@ LPCWSTR stringToLPCWSTR(const std::string& str) {
     // Return LPCWSTR (pointer to the wide string)
     return wideStr.c_str();
 }
+*/
+
+void parseCellReference(const std::string& ref, int& row, int& col) {
+    col = 0;
+    int i = 0;
+
+    // Process alphabetic part for column (e.g., "A", "B", ..., "AA", ...)
+    while (i < ref.length() && std::isalpha(ref[i])) {
+        col = col * 26 + (ref[i] - 'A' + 1);
+        i++;
+    }
+
+    col--; // Adjust column index to be zero-based
+
+    // Process numeric part for row
+    row = 0;
+    while (i < ref.length() && std::isdigit(ref[i])) {
+        row = row * 10 + (ref[i] - '0');
+        i++;
+    }
+
+    row--; // Adjust row index to be zero-based
+}
+wchar_t* StringToWChar_t(const std::string& str) {
+    int len = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, NULL, 0);
+    wchar_t* wstr = new wchar_t[len];
+    MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, wstr, len);
+    return wstr;
+}
 LPCWSTR charToLPCWSTR(const char* charArray) {
     // Calculate the length of the result wide string
     int len = MultiByteToWideChar(CP_UTF8, 0, charArray, -1, NULL, 0);
@@ -176,14 +142,47 @@ LPCWSTR charToLPCWSTR(const char* charArray) {
 
     return wString;
 }
+using namespace std;
 void Convert(string path, string sheet, string cl1, string cl2, string cd1, string cd2)
 {
     string newFileName, originalFileName, newName;
 
     newName = path;
+    Book* book = xlCreateXMLBook();
+    // Only threshhold is being used
+    std::map<float, Format*> colorMap;
+    if (book) {
+        if (book->load(StringToWChar_t(path)))
+        {
+			Sheet* sheet = book->getSheet(8);
+            if (sheet)
+            {
+                //Load legend (chyba tak to jest po angielsku)
+                int startRow, startCol, endRow, endCol;
+                parseCellReference(cl1, startRow, startCol);
+                parseCellReference(cl2, endRow, endCol);
+                
+                for (int i = startCol; i <= endCol; i++)
+                {
+                    //Color
+                    Format* format = sheet->cellFormat(startRow, i);
+                    //Max value
+                    CellType cellType = sheet->cellType(startRow, i+2);
+                    if (cellType == CELLTYPE_NUMBER)
+                    {
+						float value = sheet->readNum(startRow, i+2);
+						colorMap[value] = format;
+					}
+                    else
+                    {
+                        //Cos sie zjebalo
+                    }
+				}
+			}
+		}
+    }
 
-    xlnt::workbook wb;
-    xlnt::worksheet ws;
+    /*
     //Loading excel file
     try {
 
@@ -236,13 +235,13 @@ void Convert(string path, string sheet, string cl1, string cl2, string cd1, stri
             }
             case 2:
             {
-                min_cell_values[index] = int(cell.value<int>());
+                min_cell_values[index] = double(cell.value<double>());
                 //cout << "min: " << min_cell_values[i] << endl;
                 break;
             }
             case 3:
             {
-                max_cell_values[index] = int(cell.value<int>());
+                max_cell_values[index] = double(cell.value<double>());
                 //cout << "max:" << max_cell_values[i] << endl;
                 break;
             }
@@ -264,26 +263,29 @@ void Convert(string path, string sheet, string cl1, string cl2, string cd1, stri
     {
         for (int j = coordinates[0]; j < coordinates[2] + 1; j++)
         {
-
+            xlnt::cell cell = cell_get(j, i, ws);
             //cout << to_string(cell_get(j, i, ws).value<int>()) << " ";
-
-            for (int w = 0; w < length + 1; w++)
+            if (cell.data_type() != xlnt::cell_type::number)
             {
-                //cout << "w: " << w << endl;
-                //cout << to_string(min_cell_values[w]) << endl;
-                //cout << to_string(max_cell_values[w]) << endl;
-                if (cell_get(j, i, ws).value<int>() > min_cell_values[w] && cell_get(j, i, ws).value<int>() < max_cell_values[w])
+				continue;
+            }
+            else {
+                for (int w = 0; w < length + 1; w++)
                 {
-                    color_fill_cell(cell_get(j, i, ws), color_table[w]);
-                    break;
+                    auto val = cell_get(j, i, ws).value<double>();
+
+                    if (val > min_cell_values[w] && val < max_cell_values[w])
+                    {
+                        color_fill_cell(cell_get(j, i, ws), color_table[w]);
+                        break;
+                    }
                 }
             }
-
         }
         //cout << endl;
     }
 
 
     wb.save(newName);
-
+    */
 }
