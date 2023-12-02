@@ -17,6 +17,7 @@ using namespace libxl;
 
 int coordinates[4];
 
+//vector<Format*> formats;
 vector<Color> colors;
 
 int titleToNumber(string s)
@@ -60,22 +61,6 @@ void get_cell(wstring first_cell, wstring second_cell)
         swap(coordinates[3], coordinates[1]);
 }
 
-void setCellFillColor(Sheet* sheet, int row, int col, const Color& fillColor) {
-    if (sheet) {
-        Format* cellFormat = sheet->cellFormat(row, col);
-        cellFormat->setPatternBackgroundColor(fillColor);
-        sheet->writeBlank(row, col, cellFormat);
-    }
-}
-
-void getCellColor(Sheet* sheet, int row, int col) {
-    //Format* format = sheet->cellFormat(row, col);
-    //int colorValue = format->fillPattern();
-
-    //// Store the color in the vector
-    //colors.push_back(format->patternForegroundColor());
-}
-
 LPCWSTR stringToLPCWSTR(const std::string& str) {
     // Convert std::string to std::wstring
     std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
@@ -97,40 +82,92 @@ LPCWSTR charToLPCWSTR(const char* charArray) {
     return wString;
 }
 
+
 void getCellColor(Book* book, Sheet* sheet, int i, int j)
 {
-    Format* format1 = book->addFormat();
+    Format* format2;
+    format2 = book->addFormat();
 
-    format1 = sheet->cellFormat(i, j);
-    format1->setFillPattern(FILLPATTERN_SOLID);
-    colors.push_back(format1->patternForegroundColor());
+    format2 = sheet->cellFormat(i, j);
+    format2->setFillPattern(FILLPATTERN_SOLID);
+    colors.push_back(format2->patternForegroundColor());
+    //delete format2;
 }
 
 void setCellFillColor(Book* book, Sheet* sheet, int i, int j, Color color)
 {
-    Format* format2 = book->addFormat();
+    Format* format1;
+    //formats.push_back(format1);
+    format1 = book->addFormat();
     Font* font = book->addFont();
 
 
     double number = sheet->readNum(i, j);
-
+    
     font = sheet->cellFormat(i, j)->font();
-    format2->setFont(font);
-    format2->setPatternForegroundColor(color);
-    format2->setFillPattern(FILLPATTERN_SOLID);
-    sheet->writeBlank(i, j, format2);
-    sheet->writeNum(i, j, number, format2);
+    format1->setFont(font);
+    format1->setPatternForegroundColor(color);
+    format1->setFillPattern(FILLPATTERN_SOLID);
+    sheet->writeBlank(i, j, format1);
+    sheet->writeNum(i, j, number, format1);
+
+    //delete format1;
 }
 
-void Convert(wstring path, int sheet1, wstring cl1, wstring cl2, wstring cd1, wstring cd2)
+Sheet* getSheetByName(Book* book, const wchar_t* name)
 {
+    for (int i = 0; i < book->sheetCount(); ++i)
+    {
+        if (wcscmp(book->getSheet(i)->name(), name) == 0)
+        {
+            return book->getSheet(i);
+        }
+    }
+    return 0;
+}
+
+
+void Convert(wstring path, wstring sheet1, wstring cl1, wstring cl2, wstring cd1, wstring cd2, BOOL bak)
+{
+    
+    
+
     Book* book = xlCreateXMLBook();
     book->setRgbMode(true);
 
-    book->load(L"D:/excel/DRX MW CONTROLLER/DRX-MW-Controller/heh.xlsx");
+    wchar_t* ptr = _wcsdup(path.c_str());
 
-    int activeSheetIndex = book->activeSheet();
-    Sheet* sheet = book->getSheet(activeSheetIndex);
+    book->load(ptr);
+
+    if (bak) {
+        size_t newSize = wcslen(ptr) + wcslen(L".bak") + 1;
+        wchar_t* backupPath = new wchar_t[newSize];
+
+        if (!backupPath) {
+            // Handle memory allocation failure
+        }
+        else {
+            // Use wcscpy_s instead of wcscpy
+            errno_t err = wcscpy_s(backupPath, newSize, ptr);
+            if (err != 0) {
+                // Handle error
+            }
+            else {
+                wcscat_s(backupPath, newSize, L".bak"); // Consider also using wcscat_s for safety
+                book->save(backupPath);
+            }
+
+            delete[] backupPath;
+        }
+    }
+       
+    
+
+    wchar_t* sheet_ptr = _wcsdup(sheet1.c_str());
+
+    //int activeSheetIndex = book->activeSheet();
+    Sheet* sheet = getSheetByName(book, sheet_ptr);
+
     // FillPattern fillPatterns = FILLPATTERN_SOLID;
 
      //Format* format2 = book->addFormat();
@@ -197,31 +234,33 @@ void Convert(wstring path, int sheet1, wstring cl1, wstring cl2, wstring cd1, ws
 
             //cout << to_string(cell_get(j, i, ws).value<int>()) << " ";
 
-            for (int w = 0; w < length + 1; w++)
+            for (int w = 0; w < length + 3; w++)
             {
                 //cout << "w: " << w << endl;
                 //cout << to_string(min_cell_values[w]) << endl;
                 //cout << to_string(max_cell_values[w]) << endl;
-                int cellValue = sheet->readNum(i, j);
+                //int cellValue = sheet->readNum(i, j);
 
                 // Check if the cell has a value (not equal to -1 or any other indicator)
-                if (cellValue != -1)
+                if (sheet->readNum(j - 1, i - 1) > min_cell_values[w] && sheet->readNum(j - 1, i - 1) <= max_cell_values[w])
                 {
-                    if (sheet->readNum(j - 1, i - 1) > min_cell_values[w] && sheet->readNum(j - 1, i - 1) <= max_cell_values[w])
-                    {
-                        int numer = sheet->readNum(j - 1, i - 1);
-                        setCellFillColor(book, sheet, j - 1, i - 1, colors[w]);
+                    //int numer = sheet->readNum(j - 1, i - 1);
+                    setCellFillColor(book, sheet, j - 1, i - 1, colors[w]);
 
-                        break;
-                    }
+                    break;
                 }
-                                
+
+
+
+
             }
 
         }
 
     }
 
-    book->save(L"example.xlsx");
+
+    book->save(ptr);
     book->release();
+    
 }
