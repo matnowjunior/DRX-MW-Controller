@@ -11,11 +11,16 @@
 #include <codecvt>
 #include <locale>
 #include "libxl.h"
+#include <crtdbg.h>
+#include <tchar.h>
+
 
 using namespace std;
 using namespace libxl;
 
 int coordinates[4];
+
+vector<wstring> sheet_names;
 
 //vector<Format*> formats;
 vector<Color> colors;
@@ -91,7 +96,6 @@ void getCellColor(Book* book, Sheet* sheet, int i, int j)
     format2 = sheet->cellFormat(i, j);
     format2->setFillPattern(FILLPATTERN_SOLID);
     colors.push_back(format2->patternForegroundColor());
-    //delete format2;
 }
 
 void setCellFillColor(Book* book, Sheet* sheet, int i, int j, Color color)
@@ -100,10 +104,11 @@ void setCellFillColor(Book* book, Sheet* sheet, int i, int j, Color color)
     //formats.push_back(format1);
     format1 = book->addFormat();
     Font* font = book->addFont();
-
+    
+    
 
     double number = sheet->readNum(i, j);
-    
+
     font = sheet->cellFormat(i, j)->font();
     format1->setFont(font);
     format1->setPatternForegroundColor(color);
@@ -111,7 +116,7 @@ void setCellFillColor(Book* book, Sheet* sheet, int i, int j, Color color)
     sheet->writeBlank(i, j, format1);
     sheet->writeNum(i, j, number, format1);
 
-    //delete format1;
+    format1 ->setBorder(BORDERSTYLE_THIN);
 }
 
 Sheet* getSheetByName(Book* book, const wchar_t* name)
@@ -123,15 +128,18 @@ Sheet* getSheetByName(Book* book, const wchar_t* name)
             return book->getSheet(i);
         }
     }
+
+    MessageBox(
+        NULL,                   // Parent window, if available, or NULL
+        _T("Wybrany arkusz nie istnieje"), // Message to be displayed
+        _T("Blad"),             // Title of the message box
+        MB_ICONERROR | MB_OK    // Style of the message box
+    );
     return 0;
 }
 
-
 void Convert(wstring path, wstring sheet1, wstring cl1, wstring cl2, wstring cd1, wstring cd2, BOOL bak)
 {
-    
-    
-
     Book* book = xlCreateXMLBook();
     book->setRgbMode(true);
 
@@ -159,14 +167,18 @@ void Convert(wstring path, wstring sheet1, wstring cl1, wstring cl2, wstring cd1
 
             delete[] backupPath;
         }
+
+        return;
     }
-       
-    
+
+
 
     wchar_t* sheet_ptr = _wcsdup(sheet1.c_str());
 
     //int activeSheetIndex = book->activeSheet();
     Sheet* sheet = getSheetByName(book, sheet_ptr);
+
+    if(sheet == 0) return;
 
     // FillPattern fillPatterns = FILLPATTERN_SOLID;
 
@@ -199,16 +211,21 @@ void Convert(wstring path, wstring sheet1, wstring cl1, wstring cl2, wstring cd1
             {
             case 1:
             {
-                getCellColor(book, sheet, j - 1, i - 1);
+                sheet_names.push_back(sheet->readStr(j - 1, i - 1));
                 break;
             }
             case 2:
+            {
+                getCellColor(book, sheet, j - 1, i - 1);
+                break;
+            }
+            case 3:
             {
                 min_cell_values[index] = sheet->readNum(j - 1, i - 1);
                 //cout << "min: " << min_cell_values[i] << endl;
                 break;
             }
-            case 3:
+            case 4:
             {
                 max_cell_values[index] = sheet->readNum(j - 1, i - 1);
                 //cout << "max:" << max_cell_values[i] << endl;
@@ -234,7 +251,7 @@ void Convert(wstring path, wstring sheet1, wstring cl1, wstring cl2, wstring cd1
 
             //cout << to_string(cell_get(j, i, ws).value<int>()) << " ";
 
-            for (int w = 0; w < length + 3; w++)
+            for (int w = 0; w < length + 1; w++)
             {
                 //cout << "w: " << w << endl;
                 //cout << to_string(min_cell_values[w]) << endl;
@@ -247,11 +264,12 @@ void Convert(wstring path, wstring sheet1, wstring cl1, wstring cl2, wstring cd1
                     //int numer = sheet->readNum(j - 1, i - 1);
                     setCellFillColor(book, sheet, j - 1, i - 1, colors[w]);
 
+                    const wchar_t* wcs = sheet_names[w].c_str();
+
+                    sheet->writeStr(j - 1, i - 1,wcs);
+
                     break;
                 }
-
-
-
 
             }
 
@@ -262,5 +280,7 @@ void Convert(wstring path, wstring sheet1, wstring cl1, wstring cl2, wstring cd1
 
     book->save(ptr);
     book->release();
-    
+
+    _CrtDumpMemoryLeaks();
+
 }
