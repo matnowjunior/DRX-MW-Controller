@@ -4,7 +4,7 @@
 #include <string>      // Required for std::wstring
 #include <regex>       // Required for std::wregex and std::regex_match
 #include <cwctype>  // Required for towupper
-
+#include <vector>
 #include "resource.h"
 #include "ValuesSelector.h"
 #include <tchar.h>
@@ -33,13 +33,40 @@ HFONT hArialFont = CreateFont(16,          // Height of font
     FF_DONTCARE | DEFAULT_PITCH, // Family and pitch
     L"Arial");   // Font name
 int RowAsANumber(std::wstring value) {
-    int rowValue = 0;
+    /*int rowValue = 0;
     for (int i = 0; i < value.length(); i++)
     {
-        if(isdigit(value[i])) rowValue += (int)value[i];
+        if(isdigit(value[i]))
+        {
+            rowValue += ((int)value[i] * pow(10, value.length() - 1 - i));
+        }
+          
+    }*/
+
+    int rowValue = 0;
+
+    std::string number = "";
+
+    for (char c : value)
+    {
+        if (std::isdigit(c))
+        {
+            number += c;
+        }
     }
+    
+    rowValue = std::stoi(number);
+
+    /*int a = rowValue;
+    wchar_t buffer[256];
+    wsprintfW(buffer, L"%d", a);
+    MessageBoxW(nullptr, buffer, buffer, MB_OK);*/
+
     return rowValue;
 }
+
+
+
 LRESULT CALLBACK EditSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
     case WM_CHAR: {
@@ -198,10 +225,10 @@ LRESULT CALLBACK SecondaryWindowProcedure(HWND hWnd, UINT uMsg, WPARAM wParam, L
             //Check if diffrence between collums is 3
             if (isDataValid) {
 				int diffrence = RowAsANumber(labelValues[1]) - RowAsANumber(labelValues[0]);
-                if (diffrence != 2) {
+                if (diffrence != 3) {
                     MessageBox(
 						hWnd,                   // Parent window, if available, or NULL
-						_T("Wiersze legendy musza byc oddalone o 3!"), // Message to be displayed
+						_T("Wiersze legendy musza byc oddalone o 4!"), // Message to be displayed
 						_T("Blad"),             // Title of the message box
 						MB_ICONERROR | MB_OK    // Style of the message box
 					);
